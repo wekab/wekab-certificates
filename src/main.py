@@ -30,7 +30,7 @@ def process_certificates() -> None:
         participant_full_name="Juan Diego Pereiro Areán",
         participant_dni="45671234Z",
         course_title="Creación automatizada de certificados desde Python",
-        course_code="SSCE0110",
+        course_sepe_code="SSCE0110",
         professional_family="Lenguajes de programación",
         professional_area="Tecnologías de la información",
         course_start_date="04/03/2025",
@@ -41,7 +41,11 @@ def process_certificates() -> None:
         online_hours=0,
         header_logo_path="examples/tu-formacion-importa-logo.png",
         output_pdf_path=tmp_certificate_path,
-        output_pdf_uuid=document_id
+        output_pdf_uuid=document_id,
+        course_internal_code="FEH25468339",
+        presential_town="Monterroso",
+        presential_province="Lugo",
+        is_draft=False
     )
     sign_pdf(
         input_pdf=tmp_certificate_path,

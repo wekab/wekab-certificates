@@ -12,21 +12,28 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, HRFlowable, ListItem, ListFlowable
 )
 
+def set_draft_logo(canvas, doc):
+    """Draws draft logo at fixed positions on the PDF canvas background."""
+    draft_logo_path = os.path.expanduser("media/draft.png")
+    draft_logo = Image(draft_logo_path, width=15 * cm, height=15 * cm)
+    draft_logo.left = 3 * cm
+    draft_logo.bottom = 7.35 * cm
+    draft_logo.drawOn(canvas, draft_logo.left, draft_logo.bottom)
 
-def set_background_logos(canvas, doc):
-    """Draws organization logos at fixed positions on the PDF canvas background."""
+def set_wekab_verified_logo(canvas, doc):
+    """Draws wekab verified logo at fixed positions on the PDF canvas background."""
     wekab_logo_path = os.path.expanduser("media/wekab_verified.png")
-    keystore_logo_path = os.path.expanduser("media/keystore.png")
-
     wekab_logo = Image(wekab_logo_path, width=4 * cm, height=4 * cm)
-    keystore_logo = Image(keystore_logo_path, width=1.5 * cm, height=2 * cm)
-
     wekab_logo.left = 13 * cm
-    wekab_logo.bottom = 2.5 * cm
-    keystore_logo.left = 4 * cm
-    keystore_logo.bottom = 3.75 * cm
-
+    wekab_logo.bottom = 1.75 * cm
     wekab_logo.drawOn(canvas, wekab_logo.left, wekab_logo.bottom)
+
+def set_keystore_logo(canvas, doc):
+    """Draws keystore logo at fixed positions on the PDF canvas background."""
+    keystore_logo_path = os.path.expanduser("media/keystore.png")
+    keystore_logo = Image(keystore_logo_path, width=1.5 * cm, height=2 * cm)
+    keystore_logo.left = 4 * cm
+    keystore_logo.bottom = 3 * cm
     keystore_logo.drawOn(canvas, keystore_logo.left, keystore_logo.bottom)
 
 
@@ -61,12 +68,16 @@ def set_vertical_doc_id(canvas, doc, document_id: uuid.UUID):
 
 
 # Callback to print special parts out of the layout
-def build_document_callback_manager(document_id: uuid.UUID):
+def build_document_callback_manager(document_id: uuid.UUID, is_draft: bool):
     """Returns a callback function to render background elements and document ID during PDF build."""
 
     def callback(canvas, doc):
         set_vertical_doc_id(canvas, doc, document_id)
-        set_background_logos(canvas, doc)
+        set_keystore_logo(canvas, doc)
+        if is_draft:
+            set_draft_logo(canvas, doc)
+        else:
+            set_wekab_verified_logo(canvas, doc)
 
     return callback
 
@@ -89,10 +100,13 @@ def create_execution_certificate(
         header_logo_path: str,
         output_pdf_path: str,
         output_pdf_uuid: uuid.UUID,
-        course_code: str = None,
-        professional_family: str = None,
-        professional_area: str = None,
-
+        course_internal_code: str | None = None,
+        course_sepe_code: str | None = None,
+        professional_family: str | None = None,
+        professional_area: str | None = None,
+        presential_town: str | None = None,
+        presential_province: str | None = None,
+        is_draft: bool = False
 ):
     """
     Generates a styled PDF certificate verifying the delivery of a course, including details about the
@@ -116,9 +130,13 @@ def create_execution_certificate(
         header_logo_path (str): File path to the header logo image.
         output_pdf_path (str): Destination file path to save the generated PDF certificate.
         output_pdf_uuid (uuid.UUID): Unique identifier of the certificate for tracking.
-        course_code (str, optional): Course identification code.
+        course_internal_code (str, optional): Course internal identification code.
+        course_sepe_code (str, optional): Course SEPE identification code.
         professional_family (str, optional): Professional family the course belongs to.
         professional_area (str, optional): Professional area the course is related to.
+        presential_town (str, optional): Location where the course took place.
+        presential_province (str, optional): Province where the course took place.
+        is_draft (bool): Shows the watermark of draft
     """
 
     output_pdf_path = os.path.expanduser(output_pdf_path)
@@ -205,10 +223,12 @@ def create_execution_certificate(
 
     # Section course info
     list_items = []
+    if course_internal_code:
+        list_items.append(f"Código: <b>{course_internal_code}</b>")
     if course_title:
         title = f"Título del curso: <b>{course_title}</b>"
-        if course_code:
-            title += f" (<b>{course_code}</b>)"
+        if course_sepe_code:
+            title += f" <b>({course_sepe_code})</b>"
         list_items.append(title)
     if professional_family:
         list_items.append(f"Familia Profesional: <b>{professional_family}</b>")
@@ -219,16 +239,24 @@ def create_execution_certificate(
         f"Horas totales impartidas: <b>{total_course_hours}</b> horas",
         "Horas impartidas por modalidad:"
     ]
-    sublist_items = [
-        f"Presencial: {presential_hours} horas",
+    place_list_items = []
+    if presential_hours > 0 and presential_town:
+        place_list_items.append(f"Lugar de impartición: {presential_town}")
+    if presential_hours > 0 and presential_province:
+        place_list_items.append(f"Provincia: {presential_province}")
+    place_list = [
+        ListItem(Paragraph(f"{item}", normal_style), leftIndent=50) for item in place_list_items
+    ]
+    hours_list_items = [
         f"Webinar/presencial virtual: {webinar_hours} horas",
         f"Tutorízación online: {online_hours} horas",
+        f"Presencial: {presential_hours} horas",
     ]
-    sublist = [
-        ListItem(Paragraph(f"{item}", normal_style), leftIndent=30) for item in sublist_items
+    hours_list = [
+        ListItem(Paragraph(f"{item}", normal_style), leftIndent=30) for item in hours_list_items
     ]
     main_list = ListFlowable(
-        [ListItem(Paragraph(f"{item}", normal_style)) for item in list_items] + sublist,
+        [ListItem(Paragraph(f"{item}", normal_style)) for item in list_items] + hours_list + place_list,
         bulletFontName="Helvetica-Bold",
         bulletColor=colors.black,
         bulletType="bullet",
@@ -236,13 +264,13 @@ def create_execution_certificate(
         spaceBefore=6,
         spaceAfter=0
     )
-    course_section_list_max_height = 8.1 * cm
+    course_section_list_max_height = 10 * cm
     fixed_height_table = Table(
         [[main_list]],
         rowHeights=[course_section_list_max_height]
     )
     fixed_height_table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (0, 0), "TOP"),  # o "MIDDLE" o "BOTTOM"
+        ("VALIGN", (0, 0), (0, 0), "TOP"),
     ]))
     content_elements.append(fixed_height_table)
 
@@ -252,7 +280,7 @@ def create_execution_certificate(
         "para la acreditación de la experiencia docente.",
         normal_style_spacer
     ))
-    content_elements.append(Spacer(1, 52))
+    content_elements.append(Spacer(1, 20))
 
     # Section signatures
     current_datetime = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -268,9 +296,12 @@ def create_execution_certificate(
         small
     )
     verified_paragraph_title = Paragraph("<i>Verificado por:</i><br/><br/>", right_align_title)
+    signed_verified_paragraphs = [signed_by_paragraph]
+    if not is_draft:
+        signed_verified_paragraphs.append(verified_paragraph)
     signatures_table_data = [
         [signed_by_title, verified_paragraph_title],
-        [signed_by_paragraph, verified_paragraph]
+        signed_verified_paragraphs
     ]
     signature_table = Table(signatures_table_data, colWidths=[9 * cm, 7 * cm])
     signature_table.setStyle(TableStyle([
@@ -278,7 +309,7 @@ def create_execution_certificate(
         ("LINEBELOW", (0, 0), (-1, -1), 0, colors.transparent),
     ]))
     content_elements.append(signature_table)
-    content_elements.append(Spacer(1, 52))
+    content_elements.append(Spacer(1, 30))
 
     # Section footer
     content_elements.append(Paragraph(
@@ -288,4 +319,4 @@ def create_execution_certificate(
     ))
 
     # Document general builder
-    document.build(content_elements, onFirstPage=build_document_callback_manager(output_pdf_uuid))
+    document.build(content_elements, onFirstPage=build_document_callback_manager(output_pdf_uuid, is_draft))
